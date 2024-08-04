@@ -348,3 +348,452 @@ class Money {
   | 게임                   | 최대 히트 포인트, 남은 히트 포인트, 히트포인트 회복량, 공격력, 매직포인트 , 매직포인트 소비량, 소지금, <br /> 적이 떨어뜨린 금액, 아이템 가격, 아이템 이름 등 |
 
 - 값 객체와 완전 생성자는 얻을 수 있는 효과가 거의 비슷하므로, 일반적으로 함께 사용한다.
+
+# 4. 불변 활용하기 : 안정적으로 동작하게 만들기
+
+## 4.1 재할당
+
+- 재할당은 변수의 의미를 바꿔 추측하기 어렵게 만든다.
+
+  ```java
+  int damage() {
+  	// 멤버의 힘과 무기 성능을 기본 공격력으로 활용합니다.
+  	int tmp = member.power() + member.weaponAttack();
+      // 멤버의 속도로 공격력을 보정합니다.
+      tmp = (int)(tmp * (1f + member.seepd() / 100f));
+      // 공격력에서 적의 방어력을 뺀 값을 대미지로 사용합니다.
+      tmp = tmp - (int)(enemy.defenc / 2);
+      // 대미지가 음수가 되지 않고 조정합니다.
+      tmp = Math.max(0,tmp);
+      
+      return tmp;
+  }
+  ```
+
+### 4.1.1 불변 변수로 만들어서 재할당 막기
+
+- 불변 변수 이용하기
+
+  ```java
+  int damage(){
+  	final int basicAttackPower = member.power() + member.weaponAttack();
+  	final int finalAttackPower = (int)(basicAttackPower * (1f + member.speed()/100f));
+  	final int reduction = (int)(enemy.defenc/2);
+  	final int damage = Math.max(0,finalAttackPower - reduction);
+  }
+  ```
+
+### 4.1.2 매개변수도 불변으로 만들기
+
+- 매개변수 productionPrice 를 재할당 하는 코드
+
+  ```java
+  void addPrice(int productPrice) {
+  	productPrice = totalPrice + productPrice;
+  	if(MAX_TOTAL_PRICE < productPrice){
+  		throw new IlleagalArgumentException("구매 상한 금액을 넘었습니다.");
+  	}
+  }
+  ```
+
+- 매개변수에 final을 붙여 불변으로 만들기
+
+  ```java
+  void addPrice(final int productPrice){
+  	final int increasedTotalPrice = totalPrice + productPrice;
+  	if(MAX_TOTAL_PRICE < increasedTotalPrice){
+  		throw new IllegalArgumentException("구매 상한 금액을 넘었습니다.");
+  	}
+  }
+  ```
+
+## 4.2 가변으로 인해 발생하는 의도하지 않은 영향
+
+### 4.2.1 사례 1 : 가변 인스턴스 재사용하기
+
+- 공격력을 나타내는 클래스
+
+  ```JAVA
+  class AttackPower{
+  	static fianl int MIN = 0;
+      int value; //final을 붙이지 않았으므로 가변
+      
+      AttackPower(int value){
+          if(value < MIN){
+              throw new IllegalArgumentException();
+          }
+          
+          this.value = value;
+      }
+  }
+  ```
+
+- 무기를 나타내는 클래스
+
+  ```java
+  class Weapon {
+  	final AttackPower attackPower;
+  	
+  	Weapon(AttackPower attackPower){
+  		thia.attackPower = attackPower;
+  	}
+  }
+  ```
+
+- AttackPower 인스턴스 재사용하기
+
+  ```java
+  AttackPower attackPower = new AttackPower(20);
+  Weapon weaponA = new Weapon(attackPower);
+  Weapon weaponB = new Weapon(attackPower);
+  ```
+
+  ```
+  '무기 각각의 공격력을 강화할 수 있도록 조건을 변경하자'
+  	- 어떤 무기의 공격력을 강화하면, 다른 무기의 공격력도 강회되는 버그가 발생
+  	- weaponA의 공격력을 변경 했더니, weaponB의 공격력도 함께 바뀌었다.
+  ```
+
+- 재사용하고 있는 공격력을 변경하면?
+
+  ```java
+  AttackPower attackPower = new AttackPower(20);
+  
+  Weapon weaponA = new Weapon(attackPower);
+  Weapon weaponB = new Weapon(attackPower);
+  
+  weaponA.attackPower.value = 25;
+  
+  System.out.println("Weapon A attack power : " + weaponA.attackPower.value);
+  System.out.println("Weapon B attack power : " + weaponB.attackPower.value);
+  
+  -----------------------------
+  Weapon A attack power : 25
+  Weapon B attack power : 25
+  ```
+
+- 공격력 인스턴스 개별적으로 생성하기
+
+  ```JAVA
+  AttackPower attackPowerA = new AttackPower(20);
+  AttackPower attackPowerB = new AttackPower(20);
+  
+  Weapon weaponA = new Weapon(attackPowerA);
+  Weapon weaponB = new Weapon(attackPowerB);
+  
+  weaponA.attackPower.value += 5;
+  
+  System.out.println("Weapon A attack power : " + weaponA.attackPower.value);
+  System.out.println("Weapon B attack power : " + weaponB.attackPower.value);
+  
+  -------------------------
+  Weapon A attack power : 25
+  Weapon B attack power : 20
+  ```
+
+### 4.2.2  사례 2:  함수로 가변 인스턴스 조작하기
+
+- 공격력을 변화시키는 메서드 추가하기
+
+  ```java
+  class AttackPower{
+  	static fianl int MIN = 0;
+      int value; //final을 붙이지 않았으므로 가변
+      
+      AttackPower(int value){
+          if(value < MIN){
+              throw new IllegalArgumentException();
+          }
+          
+          this.value = value;
+      }
+      /**
+      * 공격력 강화하기
+      * @param increment 공격력 증가량
+      */
+      void reinforce(int increment){
+      	value += increment;
+      }
+      
+      /** 무력화하기 */
+      void disable(){
+          value = MIN;
+      }
+  }
+  ```
+
+- 공격력을 강화하는 처리
+
+  ```java
+  AttackPower attackPower = new AttackPower(20);
+  
+  //생략
+  attackPower.reinforce(15);
+  System.out.println("attack power : " + attackPower.value);
+  
+  -----------------------
+  attack power : 35
+  ```
+
+- 공격력이 0이 되는 상황이 발생
+
+  - AttackPower 인스턴스가 다른 스레드에서 사용되었음을 확인
+  - 다른 스래드에서 실행하면서, 공격력을 0으로 만드는 AttackPower.disable 메서드를 호출한 것
+
+  ```
+  attack power : 0
+  ```
+
+### 4.2.3 부수 효과의 단점
+
+- 주요 작용 : 함수(메서드)가 매개변수를 전달받고, 값을 리턴하는 것
+
+- 부수 효과 : 주요 작용 이외의 상태 변경을 일으키는 것 (상태 변경 : 함수 밖에 있는 상태를 변경하는 것)
+
+-  상태 변경
+
+  1. 인스턴스 변수 변경
+
+  2. 전역 변수 변경
+
+  3. 매개변수 변경
+
+  4. 파일 읽고 쓰기 같은 I/O 조작
+
+     - 파일은 파일을 읽는 시점에 반드시 존재한다고 할 수 없고, 파일을 읽는 중에 내용이 변경될 수 도 있다.
+
+     - 그래서 항상 같은 결과가 나온다고 보장할 수 없다.
+
+### 4.2.4 함수의 영향 범위 한정하기
+
+- 부수효과가 있는 함수는 영향 범위를 예측하기 힘들다.
+
+- 따라서, 범위를 한정하는 것이 좋다.
+
+  1. 데이터(상태)는 매개변수로 받는다.
+  2. 상태를 변경하지 않는다.
+  3. 값은 함수의 리턴 값으로 돌려준다.
+
+  ```
+  "상태를 변경하지 않고 값을 리턴하기만 하는 함수가 이상적이다 !!!"
+  ```
+
+  ```
+  객체지향 프로그래밍 언어는 함수의 부수 효과로 인한 범위를 클래스 내부까지 허용하는 것이 일반적
+  ```
+
+### 4.2.5 불변으로 만들어서 예기치 못한 동작 막기
+
+- 기능 변경 떄에 의도하지 않게 부수효과가 있는 함수가 만들어져서, 예상하지 못한 동작을 일으킬 가능성은 항상 존재
+
+- 불변으로 견고해진 AttackPower 클래스
+
+  ```java
+  class AttackPower{
+  	static final int MIN = 0;
+  	final int value; // final로 불변으로 만들었습니다.
+  	
+  	AttackPower(final int value){
+  		if(value < MIN){
+  			throw new IlleagalArgumentException();
+  		}
+  		this.value = value;
+  	}
+  	/**
+  	* 공격력 강화하기
+  	* @param increment 공격력 증가량
+  	* @return 증가된 공격력
+  	*/
+      AttackPower reinforce(final AttackPower increment){
+          return new AttackPower(this.value + increment.value);
+      }
+      
+      /**
+      * 무력화 하기
+      * @return 무력화한 공격력
+      */
+      AttackPower disable(){
+          return new AttackPower(MIN);
+      }
+  }
+  ```
+
+- 영향 범위를 줄인 공격력 강화
+
+  ```java
+  fianl AttackPower attackPower = new AttackPower(20);
+  // 생략
+  final AttackPower reinforced = attackPower.reinforce(new AttackPower(15));
+  ```
+
+- 인스턴스를 생성했으므로 영향을 주지 않음
+
+  ```java
+  // 다른 스레드에서 처리
+  final AttackPower disabled = attackPower.disable();
+  ```
+
+- 무기를 나타내는 클래스(개선 버전)
+
+  ```java
+  class Weapon {
+  	fianl AttackPower = attackPower;
+  	
+  	Weapon(fianl AttackPower attackPower){
+  		this.attackPower = attackPower;
+  	}
+      /**
+      * 무기 강화하기
+      * @param increment 공격력 강화
+      * @return 강화된 무기
+      */
+      Weapon reinforce(final AttackPower increment){
+          final AttackPower reinforced = attackPower.reinforce(increment);
+          return new Weapon(reinforced);
+      }
+      
+  }
+  ```
+
+- AttackPower 와 Weapon 사용(개선 버전)
+
+  ```java
+  final AttackPower attackPowerA = new AttackPower(20);
+  final AttackPower attackPowerB = new AttackPower(20);
+  
+  final Weapon weaponA = new Weapon(attackPowerA);
+  final Weapon weaponB = new Weapon(attackPowerB);
+  
+  final AttackPower increment = new AttackPower(5);
+  final Weapon reinforcedWeaponA = weaponA.reinforce(increment);
+  
+  System.out.println("Weapon A attack power : " + weaponA.attackPower.value);
+  System.out.println("Reinforced weapon A attack power : " + reinforcedWeaponA.attackPower.value);
+  System.out.println("Weapon B attack power : " + weaponB.attackPower.value);
+  
+  ------------------------
+  Weapon A attack power : 20
+  Reinforced weapon A attack power : 25
+  Weapon B attack power : 20
+  ```
+
+## 4.3 불변과 가변은 어떻게 다루어야 할까
+
+### 4.3.1 기본적으로 불변으로
+
+- 변수를 불변으로 만들면 다음과 같은 장점이 있다.
+  1. 변수의 의미가 변하지 않으므로, 혼란을 줄일 수 있다.
+  2. 동작이 안정적이게 되므로, 결과를 예측하기 쉬움
+  3. 코드의 영향 범위가 한정적이므로, 유지 보수가 편리해짐
+
+### 4.3.2 가변으로 설계해야 하는 경우
+
+- 성능 이슈
+  1. 대량의 데이터를 빠르게 처리해야 하는 경우
+  2. 이미지를 처리해야 하는 경우
+  3. 리소스에 제약이 큰 임베디드 소프트웨어를 다루는 경우
+- 스코프
+  - 스코프가 국소적인 경우에는 가변으로 사용해도 좋다.
+  - 예) 반복문 카운터 등 반복 처리 스코프에서만 사용되는 지역 변수
+
+### 4.3.3 상태를 변경하는 메서드 설계하기
+
+- 인스턴스 변수를 가변으로 만들었을 때 주의할점
+
+```
+- 히트 포인트는 0 이상
+- 히트 포인트가 0이 되면, 사망 상태로 변경
+```
+
+- 정상적으로 동작하지 않는 로직
+
+  ```java
+  class HitPoint {
+      int amount;
+  }
+  
+  class Member {
+      final HitPoint hitPoint;
+      final States states;
+      // 생략
+      
+      /**
+      * 대미지 받기
+      * @param damageAmount 대비지 크기
+      */
+      void damage(int damageAmount){
+          hitpoint.amount -= damageAmount;
+      }
+  }
+  ```
+
+- 뮤테이터 : 조건에 맞는 올바른 상태로 변경하는 메소드
+
+- 가변으로 할 떄는 반드시 올바른 상태로만 변경하도록 설계하기
+
+  - HitPoint
+
+  ```java
+  class HitPoint{
+  	private static final int MIN = 0;
+  	int amount;
+      
+      HitPoint(final int amount){
+          if(amount < MIN){
+              throw new IllegalArgumentException();
+          }
+          this.amount = amount;
+      }
+      
+      /**
+      * 대미지 받는 처리
+      * @param damageAmount 대미지 크기
+      */
+      void damage(final int damageAmount){
+          final int nextAmount = amount - damageAmount;
+          amount = Math.max(MIN, nextAmount); 	// 가변처리
+      }
+      
+      /** @return 히트포인트가 0이라면 true */
+      boolean isZero(){
+          return amount == MIN;
+      }
+  }
+  ```
+
+  - Member
+
+  ```java
+  class Member {
+  	final HitPoint hitPoint;
+  	final States states;
+  	// 생략
+      
+      /**
+      * 대미지 받는 처리
+      * @param damageAmount 대미지 크기
+      */
+      void damage(final int damageAmount){
+          hitPoint.damage(damageAmount);
+          if(hitPoint.isZero()){
+              states.add(StateType.dead);
+          }
+      }
+  }
+  ```
+
+### 4.3.4 코드 외부와 데이터 교환은 국소화하기
+
+- 외부 와의 데이터 교환
+  - 파일을 읽고 쓰는 I/O 조작
+  - 데이터 베이스
+
+```
+- 파일 OR 데이터베이스가 다른 시스템에 의해서 덮어 쓰여질 수 있다.
+- 특별한 이유없이 외부 상태에 의존하는 코드를 작성하면, 동작 예측이 힘들어 지므로 문제가 발생할 가능성이 높아진다.
+```
+
+- Repository pattern
+  - 코드와 외부와 데이터 교환을 국소화하는 테크닉
+  - 데이터베이스의 영속화를 캡슐화하는 디자인 패턴
+    - 영속화 : 데이터베이스에 데이터를 저장하는 것
