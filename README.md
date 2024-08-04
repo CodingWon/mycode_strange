@@ -389,7 +389,7 @@ class Money {
 
   ```java
   void addPrice(int productPrice) {
-  	productPrice = totalPrice + productPrice;
+  	productPrice = this.totalPrice + productPrice;
   	if(MAX_TOTAL_PRICE < productPrice){
   		throw new IlleagalArgumentException("구매 상한 금액을 넘었습니다.");
   	}
@@ -400,7 +400,7 @@ class Money {
 
   ```java
   void addPrice(final int productPrice){
-  	final int increasedTotalPrice = totalPrice + productPrice;
+  	final int increasedTotalPrice = this.totalPrice + productPrice;
   	if(MAX_TOTAL_PRICE < increasedTotalPrice){
   		throw new IllegalArgumentException("구매 상한 금액을 넘었습니다.");
   	}
@@ -784,7 +784,7 @@ class Money {
 
 ### 4.3.4 코드 외부와 데이터 교환은 국소화하기
 
-- 외부 와의 데이터 교환
+- 외부 와의 데이터 교환 
   - 파일을 읽고 쓰는 I/O 조작
   - 데이터 베이스
 
